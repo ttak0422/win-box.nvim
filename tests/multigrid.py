@@ -89,8 +89,8 @@ try:
     """)
     assert any(event[0] == "win_float_pos" for event in redraws)
     # In a T split, each accent owns only the cells of one shared separator.
-    # The global float border must not add a grid cell or paint the junction.
-    def check_accents(vert, horiz, ambi, expected_vert, expected_horiz):
+    # The global float border must not add any extra cells around accents.
+    def check_accents(vert, horiz, ambi, expected_vert, expected_horiz, expected_join):
         redraws.clear()
         accents = lua("""
           vim.o.winborder = "single"
@@ -103,14 +103,18 @@ try:
           for _, id in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
             local conf = vim.api.nvim_win_get_config(id)
             if conf.zindex == 1 then
-              assert(not (conf.row <= box.bottom and conf.row + conf.height > box.bottom
-                and conf.col <= box.right and conf.col + conf.width > box.right), "covered T junction")
-              result[#result + 1] = { id, conf.width, conf.height }
+              local at_join = conf.row <= box.bottom and conf.row + conf.height > box.bottom
+                and conf.col <= box.right and conf.col + conf.width > box.right
+              if at_join then
+                assert(conf.width == 1 and conf.height == 1, "oversized T junction")
+              end
+              result[#result + 1] = { id, conf.width, conf.height, at_join }
             end
           end
           return result
         """.replace("VERT", repr(vert)).replace("HORIZ", repr(horiz)).replace("AMBI", repr(ambi)))
-        assert len(accents) == 2 and all(min(w, h) == 1 for _, w, h in accents), accents
+        assert len(accents) == 3 and all(min(w, h) == 1 for _, w, h, _ in accents), accents
+        assert sum(at_join for _, _, _, at_join in accents) == 1, accents
         tick()
         grid_by_win, sizes, painted = {}, {}, {}
         for event in redraws:
@@ -126,15 +130,15 @@ try:
             elif event[0] == "grid_line":
                 for row in event[1:]:
                     painted.setdefault(row[0], set()).update(cell[0] for cell in row[3])
-        for win, width, height in accents:
+        for win, width, height, at_join in accents:
             grid = grid_by_win[win]
             assert sizes[grid] == (width, height), ("accent inherited frame", sizes[grid], width, height)
-            glyph = expected_vert if width == 1 else expected_horiz
+            glyph = expected_join if at_join else (expected_vert if width == 1 else expected_horiz)
             assert glyph in painted[grid] and painted[grid] <= {glyph, " "}, painted[grid]
 
-    check_accents("\u2502", "\u2500", "single", "\u2503", "\u2501")
+    check_accents("\u2502", "\u2500", "single", "\u2503", "\u2501", "\u2529")
     assert lua("return {vim.opt.fillchars:get().vert, vim.opt.fillchars:get().horiz}") == ["\u2502", "\u2500"]
-    check_accents("|", "-", "double", "|", "-")
+    check_accents("|", "-", "double", "|", "-", "+")
     lua("vim.o.ambiwidth = 'single'")
     resize(101)
     dims = lua("return {vim.api.nvim_win_get_width(left), vim.api.nvim_win_get_width(bottom)}")
@@ -263,7 +267,68 @@ try:
       vim.api.nvim_win_set_height(left, #glyph + bar + 1)
     """)
     assert pick_style("large", "as", "q")[0] == 1
-    print("win-box multigrid: shared edges, ratio, HUD guard, framed ANSI Compact and fallback")
+    lua("""
+      vim.cmd.tabnew()
+      vim.o.laststatus = 0
+      vim.o.statusline = "%="
+      vim.o.splitright = true
+      vim.o.splitbelow = true
+      local top = vim.api.nvim_get_current_win()
+      vim.cmd.vnew()
+      _G.full_right = vim.api.nvim_get_current_win()
+      vim.api.nvim_set_current_win(top)
+      vim.cmd.new()
+      _G.middle_left = vim.api.nvim_get_current_win()
+      vim.cmd.new()
+      vim.api.nvim_set_current_win(middle_left)
+      for _, win in ipairs(require("win_box.layout").windows()) do
+        vim.wo[win].statusline = "%="
+      end
+    """)
+
+    def join_cells():
+        return lua("""
+          require("win_box.boundary").draw({ boundary = true, ignore_filetypes = {} })
+          vim.cmd.redraw()
+          local out = {}
+          for _, id in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            local conf = vim.api.nvim_win_get_config(id)
+            if conf.zindex == 1 and conf.width == 1 and conf.height == 1 then
+              local buf = vim.api.nvim_win_get_buf(id)
+              local glyph = vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1]
+              out[#out + 1] = { row = conf.row, col = conf.col, glyph = glyph }
+            end
+          end
+          table.sort(out, function(a, b) return a.row < b.row end)
+          return out
+        """)
+
+    rect = lua("return require('win_box.layout').rect(middle_left)")
+    assert join_cells() == [
+        {"row": rect["top"] - 1, "col": rect["right"], "glyph": "\u252a"},
+        {"row": rect["bottom"], "col": rect["right"], "glyph": "\u2529"},
+    ]
+    lua('vim.wo[middle_left].statusline = "KEEP_CURRENT_STATUS"')
+    assert join_cells() == [
+        {"row": rect["top"] - 1, "col": rect["right"], "glyph": "\u252a"},
+    ]
+
+    lua("""
+      vim.cmd.tabnew()
+      vim.o.laststatus = 3
+      _G.cross_upper_left = vim.api.nvim_get_current_win()
+      vim.cmd.vnew()
+      vim.cmd.new() -- divide the right column
+      vim.api.nvim_set_current_win(cross_upper_left)
+      vim.cmd.new() -- divide the left column at the same row
+      vim.cmd.wincmd("=")
+      vim.api.nvim_set_current_win(cross_upper_left)
+    """)
+    rect = lua("return require('win_box.layout').rect(cross_upper_left)")
+    assert join_cells() == [
+        {"row": rect["bottom"], "col": rect["right"], "glyph": "\u2543"},
+    ]
+    print("win-box multigrid: shared edges/joins, ratio, HUD/status guard, framed ANSI Compact and fallback")
 finally:
     p.terminate()
     p.wait(timeout=5)
