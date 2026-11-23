@@ -106,7 +106,7 @@ function M.swap_windows(other)
   return other ~= nil and exchange.swap(win, other)
 end
 
-local modes = { "resize", "move", "focus" }
+local modes = { "resize", "focus" }
 
 function M.adjust(redraw)
   local origin = vim.api.nvim_get_current_win()
@@ -115,7 +115,7 @@ function M.adjust(redraw)
   end
   local dimensions = layout.snapshot()
   local restore = vim.fn.winrestcmd()
-  local mode, deferred = 1, {}
+  local mode = 1
   local bindings = keys.current.adjust
   local hints, arrows = {}, {}
   for _, name in ipairs({ "left", "down", "up", "right" }) do
@@ -130,8 +130,7 @@ function M.adjust(redraw)
   local prompt = table.concat(hints, " · ")
   local ok, accepted = pcall(function()
     while true do
-      local message = "win-box " .. modes[mode] .. (#deferred > 0 and " (" .. #deferred .. " queued)" or "")
-        .. " · " .. prompt
+      local message = "win-box " .. modes[mode] .. " · " .. prompt
       local width = math.max(1, vim.o.columns - 2)
       if vim.fn.strdisplaywidth(message) > width then
         message = vim.fn.strcharpart(message, 0, width)
@@ -149,27 +148,12 @@ function M.adjust(redraw)
       elseif action == "cycle" then
         mode = mode % #modes + 1
       elseif action and aliases[action] then
-        if mode == 2 then
-          deferred[#deferred + 1] = { win = vim.api.nvim_get_current_win(), key = action }
-        else
-          M[modes[mode]](action)
-        end
+        M[modes[mode]](action)
       end
     end
   end)
   vim.api.nvim_echo({ { "" } }, false, {})
-  if ok and accepted then
-    local active = vim.api.nvim_get_current_win()
-    for _, step in ipairs(deferred) do
-      if vim.api.nvim_win_is_valid(step.win) then
-        vim.api.nvim_set_current_win(step.win)
-        M.move(step.key)
-      end
-    end
-    if vim.api.nvim_win_is_valid(active) then
-      vim.api.nvim_set_current_win(active)
-    end
-  else
+  if not (ok and accepted) then
     if vim.api.nvim_win_is_valid(origin) then
       vim.api.nvim_set_current_win(origin)
     end

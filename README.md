@@ -66,7 +66,7 @@ given an explicit target still work.
 ## Operations
 
 - `pick()`: display labels in the current tab's split windows. Enter a label to focus it, or Escape to cancel.
-- `adjust()`: use `hjkl` or arrow keys. `e` cycles resize, move, and focus. Resize and focus are live; movement is applied on Enter. `q` or Escape cancels and restores sizes and focus.
+- `adjust()`: use `hjkl` or arrow keys. `e` switches between Resize and Focus. Changes take effect immediately. Enter keeps them; `q` or Escape cancels and restores sizes and focus.
 - `focus(dir)`, `resize(dir, amount)`, `move(dir)`: act on the current split. Directions are `left`, `down`, `up`, `right` (or `hjkl`). At an edge, focus and move do nothing.
 - `swap([target])` / `swap_windows([target])`: exchange whole windows, including across split groups. Omit the target to show the picker; a window ID or direction can also be passed. If the available space cannot accommodate the temporary split anchors, the operation returns false without swapping buffers instead.
 - `swap_buffers([target])`: exchange only buffers and views. Does not bypass fixed buffers or discard buffers with destructive `bufhidden` settings.
