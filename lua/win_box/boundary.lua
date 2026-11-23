@@ -81,6 +81,7 @@ local function draw(options)
       col = vertical and range.cell or range.start,
       width = vertical and 1 or length,
       height = vertical and length or 1,
+      border = "none", -- Separator cells must not inherit the global float frame.
       style = "minimal",
       focusable = false,
       mouse = false,
