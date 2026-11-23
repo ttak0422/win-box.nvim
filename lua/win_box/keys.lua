@@ -6,7 +6,6 @@ local defaults = {
     down = { "j", "<Down>" },
     up = { "k", "<Up>" },
     right = { "l", "<Right>" },
-    cycle = "e",
     confirm = { "<CR>", "<NL>" },
     cancel = { "q", "<Esc>", "<C-C>" },
   },
@@ -15,7 +14,7 @@ local defaults = {
     cancel = { "<Esc>", "<C-C>" },
   },
 }
-local order = { "left", "down", "up", "right", "cycle", "confirm", "cancel" }
+local order = { "left", "down", "up", "right", "confirm", "cancel" }
 
 local function field(values, fallback, name)
   if values[name] == nil then return fallback[name] end

@@ -106,8 +106,6 @@ function M.swap_windows(other)
   return other ~= nil and exchange.swap(win, other)
 end
 
-local modes = { "resize", "focus" }
-
 function M.adjust(redraw)
   local origin = vim.api.nvim_get_current_win()
   if not vim.tbl_contains(layout.windows(), origin) or #layout.windows() < 2 then
@@ -115,7 +113,6 @@ function M.adjust(redraw)
   end
   local dimensions = layout.snapshot()
   local restore = vim.fn.winrestcmd()
-  local mode = 1
   local bindings = keys.current.adjust
   local hints, arrows = {}, {}
   for _, name in ipairs({ "left", "down", "up", "right" }) do
@@ -123,14 +120,14 @@ function M.adjust(redraw)
     if key then arrows[#arrows + 1] = key end
   end
   if #arrows > 0 then hints[#hints + 1] = table.concat(arrows, " ") end
-  for _, name in ipairs({ "cycle", "confirm", "cancel" }) do
+  for _, name in ipairs({ "confirm", "cancel" }) do
     local key = bindings.labels[name][1]
     if key then hints[#hints + 1] = key .. " " .. name end
   end
   local prompt = table.concat(hints, " · ")
   local ok, accepted = pcall(function()
     while true do
-      local message = "win-box " .. modes[mode] .. " · " .. prompt
+      local message = "win-box resize · " .. prompt
       local width = math.max(1, vim.o.columns - 2)
       if vim.fn.strdisplaywidth(message) > width then
         message = vim.fn.strcharpart(message, 0, width)
@@ -145,10 +142,8 @@ function M.adjust(redraw)
         return true
       elseif action == "cancel" then
         return false
-      elseif action == "cycle" then
-        mode = mode % #modes + 1
       elseif action and aliases[action] then
-        M[modes[mode]](action)
+        M.resize(action)
       end
     end
   end)

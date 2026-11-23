@@ -28,15 +28,11 @@ assert(wb.resize("right", 4))
 assert(api.nvim_win_get_width(left) == size + 4)
 local resize_baseline = layout.snapshot()
 local resize_tree = vim.fn.winlayout()
-keys("llelq") -- Resize, then Focus, then cancel both changes.
+keys("llq") -- Cancel restores the original dimensions.
 assert(not wb.adjust())
 assert(win() == left and vim.deep_equal(layout.snapshot(), resize_baseline))
-keys("el<CR>") -- One cycle goes directly to Focus without queuing a window move.
-assert(wb.adjust() and win() == right)
 assert(vim.deep_equal(vim.fn.winlayout(), resize_tree))
-assert(vim.deep_equal(layout.snapshot(), resize_baseline))
-api.nvim_set_current_win(left)
-keys("eel<CR>") -- Two cycles return to Resize.
+keys("el<CR>") -- Former cycle key is ignored; direction still resizes.
 assert(wb.adjust() and win() == left)
 assert(api.nvim_win_get_width(left) == resize_baseline[left].width + 1)
 assert(vim.deep_equal(vim.fn.winlayout(), resize_tree))
@@ -133,7 +129,7 @@ local global_maps = api.nvim_get_keymap("n")
 local current_buf = api.nvim_get_current_buf()
 local local_maps = api.nvim_buf_get_keymap(current_buf, "n")
 wb.setup({ keys = {
-  adjust = { cycle = "<Tab>", left = false, right = "a", confirm = "!", cancel = "x" },
+  adjust = { left = false, right = "a", confirm = "!", cancel = "x" },
   picker = { labels = { "u", "v", "w" }, cancel = "p" },
 } })
 assert(vim.deep_equal(api.nvim_get_keymap("n"), global_maps))
@@ -144,9 +140,9 @@ assert(not wb.adjust() and vim.deep_equal(layout.snapshot(), custom_base))
 keys("h<Left>l<Right>!") -- disabled left, replaced right, and removed fallback aliases
 assert(wb.adjust() and vim.deep_equal(layout.snapshot(), custom_base))
 keys("a!")
-assert(wb.adjust() and api.nvim_win_get_width(top_left) == custom_base[top_left].width + 1)
-keys("<Tab>a!")
-assert(wb.adjust() and win() == right)
+assert(wb.adjust() and win() == top_left)
+assert(api.nvim_win_get_width(top_left) == custom_base[top_left].width + 1)
+assert(wb.focus("right") and win() == right)
 keys("p")
 assert(not wb.pick() and win() == right)
 keys("u")
@@ -154,10 +150,10 @@ assert(wb.pick() == layout.windows()[1])
 assert(vim.deep_equal(api.nvim_get_keymap("n"), global_maps))
 assert(vim.deep_equal(api.nvim_buf_get_keymap(current_buf, "n"), local_maps))
 
-wb.setup({ keys = { adjust = { cycle = false, confirm = false }, picker = { labels = false } } })
+wb.setup({ keys = { adjust = { confirm = false }, picker = { labels = false } } })
 assert(not wb.pick() and not wb.swap())
 local disabled = layout.snapshot()
-keys("eeq")
+keys("q")
 assert(not wb.adjust() and vim.deep_equal(layout.snapshot(), disabled))
 assert(not pcall(wb.setup, { keys = { adjust = { confirm = false, cancel = false } } }))
 assert(not pcall(wb.setup, { keys = { adjust = { left = "jj" } } }))

@@ -44,7 +44,6 @@ win_box.setup({
       down = { "s", "<Down>" },
       up = { "w", "<Up>" },
       right = { "d", "<Right>" },
-      cycle = "<Tab>",
       confirm = "<CR>",
       cancel = { "x", "<Esc>" },
     },
@@ -56,8 +55,8 @@ win_box.setup({
 })
 ```
 
-The default adjustment bindings are `h/j/k/l` and arrows, `e` for mode
-switch, Enter for confirm, and `q`, Escape or Ctrl-C for cancel. At least one
+The default resize bindings are `h/j/k/l` and arrows, Enter for confirm,
+and `q`, Escape or Ctrl-C for cancel. At least one
 confirm or cancel key is required. Keys must not overlap between actions.
 The picker lists windows with configurable labels; any key without a label
 cancels it. Set `keys.picker.labels = false` to disable label selection; operations
@@ -66,7 +65,7 @@ given an explicit target still work.
 ## Operations
 
 - `pick()`: display labels in the current tab's split windows. Enter a label to focus it, or Escape to cancel.
-- `adjust()`: use `hjkl` or arrow keys. `e` switches between Resize and Focus. Changes take effect immediately. Enter keeps them; `q` or Escape cancels and restores sizes and focus.
+- `adjust()`: resize the current split with `hjkl` or arrow keys. Changes take effect immediately. Enter keeps them; `q` or Escape restores the original sizes.
 - `focus(dir)`, `resize(dir, amount)`, `move(dir)`: act on the current split. Directions are `left`, `down`, `up`, `right` (or `hjkl`). At an edge, focus and move do nothing.
 - `swap([target])` / `swap_windows([target])`: exchange whole windows, including across split groups. Omit the target to show the picker; a window ID or direction can also be passed. If the available space cannot accommodate the temporary split anchors, the operation returns false without swapping buffers instead.
 - `swap_buffers([target])`: exchange only buffers and views. Does not bypass fixed buffers or discard buffers with destructive `bufhidden` settings.
