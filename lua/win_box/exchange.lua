@@ -53,7 +53,11 @@ function M.swap(a, b)
   if a_parent == b_parent then
     local ok = pcall(vim.cmd.wincmd, { args = { "x" }, count = vim.fn.win_id2win(b) })
     if api.nvim_win_is_valid(a) then api.nvim_set_current_win(a) end
-    return ok and vim.deep_equal(vim.fn.winlayout(), expected)
+    if not ok or not vim.deep_equal(vim.fn.winlayout(), expected) then return false end
+    -- Native exchange carries the sizes with the windows. Restore each slot
+    -- by position, matching the cross-group swap.
+    pcall(vim.cmd, dimensions)
+    return true
   end
 
   -- Anchor both slots with an adjacent scratch split before moving either

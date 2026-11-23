@@ -49,10 +49,13 @@ keys("s")
 assert(wb.pick() == right and win() == right)
 keys("<Esc>")
 assert(wb.pick() == nil and win() == right)
+local left_slot, right_slot = layout.rect(left), layout.rect(right)
 assert(wb.move("left"))
-assert(win() == right and layout.rect(right).left < layout.rect(left).left)
+assert(win() == right and vim.deep_equal(layout.rect(right), left_slot))
+assert(vim.deep_equal(layout.rect(left), right_slot))
 assert(wb.move("right"))
-assert(win() == right and layout.rect(right).left > layout.rect(left).left)
+assert(win() == right and vim.deep_equal(layout.rect(right), right_slot))
+assert(vim.deep_equal(layout.rect(left), left_slot))
 api.nvim_set_current_win(left)
 local segments = boundary.segments(left, layout.windows(), false)
 assert(#segments == 1 and segments[1].axis == "v", vim.inspect(segments))
@@ -158,4 +161,42 @@ assert(not wb.adjust() and vim.deep_equal(layout.snapshot(), disabled))
 assert(not pcall(wb.setup, { keys = { adjust = { confirm = false, cancel = false } } }))
 assert(not pcall(wb.setup, { keys = { adjust = { left = "jj" } } }))
 assert(not pcall(wb.setup, { keys = { adjust = { left = "j" } } }))
-print("win-box smoke: maps, colors, pick, adjust, edges, same-/cross-group swaps and modal key configuration")
+-- Moving the upper-left pane of the right group left swaps it with the
+-- full-height left pane, without changing the geometry of the four slots.
+vim.cmd.tabnew()
+wb.setup({ boundary = false })
+vim.o.equalalways = false
+local license = win()
+vim.cmd("rightbelow vnew")
+local lower = win()
+vim.cmd("leftabove new")
+local readme = win()
+vim.cmd("rightbelow vnew")
+local upper_right = win()
+api.nvim_win_set_width(license, 23)
+api.nvim_win_set_width(readme, 17)
+api.nvim_set_current_win(readme)
+local readme_buf = api.nvim_win_get_buf(readme)
+local license_buf = api.nvim_win_get_buf(license)
+local rectangles = {}
+for _, id in ipairs({ readme, license, lower, upper_right }) do
+  rectangles[id] = layout.rect(id)
+end
+assert(wb.move("left") and win() == readme)
+local expected_move = { "row", {
+  { "leaf", readme },
+  { "col", {
+    { "row", { { "leaf", license }, { "leaf", upper_right } } },
+    { "leaf", lower },
+  } },
+} }
+assert(vim.deep_equal(vim.fn.winlayout(), expected_move), vim.inspect(vim.fn.winlayout()))
+assert(vim.deep_equal(layout.rect(readme), rectangles[license]))
+assert(vim.deep_equal(layout.rect(license), rectangles[readme]))
+assert(vim.deep_equal(layout.rect(lower), rectangles[lower]))
+assert(vim.deep_equal(layout.rect(upper_right), rectangles[upper_right]))
+assert(api.nvim_win_get_buf(readme) == readme_buf and api.nvim_win_get_buf(license) == license_buf)
+assert(not wb.move("left") and win() == readme)
+assert(vim.deep_equal(vim.fn.winlayout(), expected_move))
+
+print("win-box smoke: maps, colors, pick, adjust, edges, directional moves, swaps and modal key configuration")

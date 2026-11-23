@@ -4,7 +4,6 @@ local exchange = require("win_box.exchange")
 local keys = require("win_box.keys")
 local M = {}
 local aliases = { left = "h", down = "j", up = "k", right = "l" }
-local splits = { h = "left", j = "below", k = "above", l = "right" }
 local opposite = { h = "l", j = "k", k = "j", l = "h" }
 
 local function direction_key(direction)
@@ -50,17 +49,6 @@ function M.resize(direction, amount)
   local size = get(win)
   local ok = pcall(set, win, math.max(1, size + sign * (amount or 1)))
   return ok and get(win) ~= size
-end
-
-function M.move(direction)
-  local key = direction_key(direction)
-  local win = vim.api.nvim_get_current_win()
-  local target = neighbor(win, key)
-  if not target then
-    return false
-  end
-  local ok = pcall(vim.api.nvim_win_set_config, win, { win = target, split = splits[key] })
-  return ok
 end
 
 local function swap_target(win, other)

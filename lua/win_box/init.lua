@@ -73,7 +73,6 @@ end
 
 M.focus = actions.focus
 M.resize = actions.resize
-M.move = actions.move
 function M.swap_windows(other)
   local swapped = actions.swap_windows(other)
   if swapped then
@@ -83,6 +82,11 @@ function M.swap_windows(other)
     boundary.schedule(options)
   end
   return swapped
+end
+
+function M.move(direction)
+  if type(direction) ~= "string" then return false end
+  return M.swap_windows(direction)
 end
 
 M.swap = M.swap_windows
