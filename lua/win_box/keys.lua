@@ -45,17 +45,18 @@ function M.compile(opts)
   assert(type(opts) == "table", "win-box: keys must be a table")
   local adjust, picker = opts.adjust or {}, opts.picker or {}
   assert(type(adjust) == "table" and type(picker) == "table", "win-box: keys.adjust and keys.picker must be tables")
-  local result = { adjust = { bindings = {}, labels = {} }, picker = { labels = {}, cancel = {} } }
+  local result = { adjust = {}, picker = { labels = {}, cancel = {} } }
+  local has_exit = false
   for _, name in ipairs(order) do
     local values = list(field(adjust, defaults.adjust, name), "adjust." .. name)
-    result.adjust.labels[name] = values
+    has_exit = has_exit or (#values > 0 and (name == "confirm" or name == "cancel"))
     for _, key in ipairs(values) do
-      local old = result.adjust.bindings[key]
+      local old = result.adjust[key]
       assert(not old or old == name, "win-box: overlapping adjust key " .. key)
-      result.adjust.bindings[key] = name
+      result.adjust[key] = name
     end
   end
-  assert(#result.adjust.labels.confirm + #result.adjust.labels.cancel > 0,
+  assert(has_exit,
     "win-box: adjust requires at least one confirm or cancel key")
 
   local chars = field(picker, defaults.picker, "labels")

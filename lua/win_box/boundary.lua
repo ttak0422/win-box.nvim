@@ -2,8 +2,15 @@ local layout = require("win_box.layout")
 local junctions = require("win_box.junctions")
 local M = {}
 local overlays = {}
-local pending = false
+local pending_options
 local drawing = false
+local adjusting = false
+
+function M.set_adjusting(value)
+  if adjusting == value then return false end
+  adjusting = value
+  return true
+end
 
 local function add(ranges, axis, start, stop, cell)
   if start < stop then
@@ -101,7 +108,9 @@ local function paint(row, col, width, lines)
     noautocmd = true,
   })
   if ok then
-    vim.wo[win].winhighlight = "Normal:WinBoxBoundary,NormalNC:WinBoxBoundary"
+    -- Both immediate and scheduled redraws use the current adjustment state.
+    local hl = adjusting and "WinBoxAdjustBoundary" or "WinBoxBoundary"
+    vim.wo[win].winhighlight = "Normal:" .. hl .. ",NormalNC:" .. hl
     overlays[#overlays + 1] = { win = win }
   else
     pcall(vim.api.nvim_buf_delete, buf, { force = true })
@@ -154,14 +163,16 @@ function M.draw(options)
 end
 
 function M.schedule(options)
-  if pending or drawing then
-    return
+  if drawing then return end
+  local pending = pending_options ~= nil
+  pending_options = options
+  if not pending then
+    vim.schedule(function()
+      local latest = pending_options
+      pending_options = nil
+      M.draw(latest)
+    end)
   end
-  pending = true
-  vim.schedule(function()
-    pending = false
-    M.draw(options)
-  end)
 end
 
 return M

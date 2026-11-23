@@ -33,8 +33,8 @@ def rpc(method, args):
         reader.feed(chunk)
 
 
-def lua(code):
-    return rpc("nvim_exec_lua", [code, []])
+def lua(code, *args):
+    return rpc("nvim_exec_lua", [code, list(args)])
 
 
 def tick():
@@ -188,6 +188,89 @@ try:
     """)
     tick()
     assert horizontal_overlays() == 0
+    # Highlight IDs outlive independent redraw batches.
+    fg_by_attr = {}
+    # Check the separator cells sent to a UI while adjust is waiting for keys.
+    def check_resize_boundary(exit_key, enabled=True, ignored=False):
+        redraws.clear()
+        result = lua("""
+          local wb, api = require("win_box"), vim.api
+          local boundary, layout = require("win_box.boundary"), require("win_box.layout")
+          local enabled, ignored, exit_key = ...
+          vim.wo[left].statusline = "%="
+          vim.wo[left].winbar = "WINBOX_RESIZE_HUD"
+          vim.bo.filetype = ignored and "TelescopePrompt" or ""
+          wb.setup({ boundary = enabled, highlights = {
+            boundary = { fg = "#126598" }, adjust_boundary = { fg = "#fa8013", bold = true },
+          } })
+          local function check(group)
+            local col, count = layout.rect(left).right, 0
+            for _, id in ipairs(api.nvim_tabpage_list_wins(0)) do
+              local conf = api.nvim_win_get_config(id)
+              if conf.zindex == 1 then
+                count = count + 1
+                assert(vim.wo[id].winhighlight == "Normal:" .. group .. ",NormalNC:" .. group)
+                assert(math.min(conf.width, conf.height) == 1 and conf.col <= col)
+                if conf.height > 1 then assert(conf.col == col) end
+              end
+            end
+            assert((count > 0) == (enabled and not ignored))
+          end
+          vim.wait(15, function() return false end)
+          vim.cmd.redraw()
+          check("WinBoxBoundary")
+          local orig, calls = vim.fn.getcharstr, 0
+          local samples = {}
+          vim.fn.getcharstr = function()
+            calls = calls + 1
+            -- Drain a draw scheduled before this poll. It must not bring the
+            -- normal highlight back until we have exited.
+            boundary.schedule({ boundary = enabled, ignore_filetypes = { "TelescopePrompt" } })
+            vim.wait(15, function() return false end)
+            vim.cmd.redraw()
+            check("WinBoxAdjustBoundary")
+            samples[calls] = layout.rect(left).right
+            if calls == 1 then return "l" end
+            if exit_key == "error" then error("fixture: input failed") end
+            return exit_key
+          end
+          local accepted = wb.adjust()
+          vim.fn.getcharstr = orig
+          assert(#samples == 2 and samples[2] == samples[1] + 1, vim.inspect(samples))
+          assert(api.nvim_get_current_win() == left)
+          assert(accepted == (exit_key == string.char(13)))
+          assert(layout.rect(left).right == samples[accepted and 2 or 1])
+          check("WinBoxBoundary")
+          assert(vim.wo[left].winbar == "WINBOX_RESIZE_HUD")
+          return accepted
+        """, enabled, ignored, "\r" if exit_key == "<CR>" else exit_key)
+        seen = []
+        for event in redraws:
+            if event[0] == "hl_attr_define":
+                for attr, rgb, _, _ in event[1:]:
+                    fg_by_attr[attr] = rgb.get("foreground")
+            elif event[0] == "grid_line":
+                for row in event[1:]:
+                    attr = 0
+                    for cell in row[3]:
+                        if len(cell) > 1:
+                            attr = cell[1]
+                        if cell[0] in {"┃", "━", "┩"}:
+                            seen.append(fg_by_attr.get(attr))
+        if enabled and not ignored:
+            expect = [color for i, color in enumerate(seen) if i == 0 or color != seen[i - 1]]
+            assert 0xFA8013 in expect and expect[-1] == 0x126598, expect
+        else:
+            assert 0xFA8013 not in seen
+        return result
+
+    assert not check_resize_boundary("q")
+    assert check_resize_boundary("<CR>")
+    assert not check_resize_boundary("error")
+    assert not check_resize_boundary("q", enabled=False)
+    assert not check_resize_boundary("q", ignored=True)
+    lua('vim.bo.filetype = ""')
+
     def pick_style(style, labels, key):
         code = """
           local style, labels, key = STYLE, LABELS, KEY
@@ -328,7 +411,61 @@ try:
     assert join_cells() == [
         {"row": rect["bottom"], "col": rect["right"], "glyph": "\u2543"},
     ]
-    print("win-box multigrid: shared edges/joins, ratio, HUD/status guard, framed ANSI Compact and fallback")
+    # Dotfiles use native UI2 + cmdheight=0. Exercise the real mapped input:
+    # an echo used to redirect Enter to a UI2 message window and reset the size.
+    lua("""
+      require("vim._core.ui2").enable()
+      vim.o.cmdheight = 0
+      vim.o.laststatus = 0
+      vim.o.statusline = "%="
+      vim.cmd.tabnew()
+      _G.resize_origin = vim.api.nvim_get_current_win()
+      vim.cmd.vnew()
+      vim.api.nvim_set_current_win(resize_origin)
+      vim.cmd.new()
+      _G.resize_bottom = vim.api.nvim_get_current_win()
+      vim.api.nvim_set_current_win(resize_origin)
+      vim.api.nvim_win_set_width(resize_origin, 35)
+      vim.wo[resize_origin].winbar = "UI2_RESIZE_HUD"
+      local wb = require("win_box")
+      wb.setup()
+      assert(vim.api.nvim_get_hl(0, { name = "WinBoxAdjustBoundary", link = true }).link == "DiagnosticWarn")
+      vim.keymap.set("n", "<C-w>e", function()
+        _G.accepted_resize = wb.adjust()
+      end)
+    """)
+    tick()
+    width = lua("return vim.api.nvim_win_get_width(resize_origin)")
+    columns = lua("return vim.o.columns")
+    rpc("nvim_input", ["<C-w>el"])
+    tick()
+    assert lua("return vim.api.nvim_win_get_width(resize_origin)") == width + 1
+    rpc("nvim_input", ["<CR>"])
+    tick()
+    assert lua("""
+      return accepted_resize == true and vim.api.nvim_get_current_win() == resize_origin
+        and vim.wo[resize_origin].winbar == "UI2_RESIZE_HUD"
+    """)
+    assert lua("return vim.api.nvim_win_get_width(resize_origin)") == width + 1
+    assert lua("return vim.api.nvim_win_get_width(resize_bottom)") == width + 1
+
+    # The accepted widths are also the baseline for future editor resizes.
+    wider = columns + 54
+    expected = ((width + 1) * (wider - 1) * 2 + columns - 1) // (2 * (columns - 1))
+    resize(wider)
+    assert lua("return vim.api.nvim_win_get_width(resize_origin)") == expected
+    assert lua("return vim.api.nvim_win_get_width(resize_bottom)") == expected
+    resize(columns)
+    assert lua("return vim.api.nvim_win_get_width(resize_origin)") == width + 1
+
+    rpc("nvim_input", ["<C-w>el"])
+    tick()
+    assert lua("return vim.api.nvim_win_get_width(resize_origin)") == width + 2
+    rpc("nvim_input", ["q"])
+    tick()
+    assert lua("return accepted_resize == false and vim.api.nvim_get_current_win() == resize_origin")
+    assert lua("return vim.api.nvim_win_get_width(resize_origin)") == width + 1
+    print("win-box multigrid: shared edges/joins, UI2 resize/ratio, HUD/status guard, framed ANSI Compact and fallback")
 finally:
     p.terminate()
     p.wait(timeout=5)

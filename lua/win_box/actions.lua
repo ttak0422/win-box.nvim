@@ -114,30 +114,12 @@ function M.adjust(redraw)
   local dimensions = layout.snapshot()
   local restore = vim.fn.winrestcmd()
   local bindings = keys.current.adjust
-  local hints, arrows = {}, {}
-  for _, name in ipairs({ "left", "down", "up", "right" }) do
-    local key = bindings.labels[name][1]
-    if key then arrows[#arrows + 1] = key end
-  end
-  if #arrows > 0 then hints[#hints + 1] = table.concat(arrows, " ") end
-  for _, name in ipairs({ "confirm", "cancel" }) do
-    local key = bindings.labels[name][1]
-    if key then hints[#hints + 1] = key .. " " .. name end
-  end
-  local prompt = table.concat(hints, " · ")
   local ok, accepted = pcall(function()
     while true do
-      local message = "win-box resize · " .. prompt
-      local width = math.max(1, vim.o.columns - 2)
-      if vim.fn.strdisplaywidth(message) > width then
-        message = vim.fn.strcharpart(message, 0, width)
-        while vim.fn.strdisplaywidth(message) > width do
-          message = vim.fn.strcharpart(message, 0, vim.fn.strchars(message) - 1)
-        end
-      end
-      vim.api.nvim_echo({ { message, "ModeMsg" } }, false, {})
+      -- Use only the non-focusable separator accent for feedback. UI2 can
+      -- turn a command-line echo into a window that consumes Enter.
       redraw()
-      local action = bindings.bindings[vim.fn.keytrans(vim.fn.getcharstr())]
+      local action = bindings[vim.fn.keytrans(vim.fn.getcharstr())]
       if action == "confirm" then
         return true
       elseif action == "cancel" then
@@ -147,7 +129,6 @@ function M.adjust(redraw)
       end
     end
   end)
-  vim.api.nvim_echo({ { "" } }, false, {})
   if not (ok and accepted) then
     if vim.api.nvim_win_is_valid(origin) then
       vim.api.nvim_set_current_win(origin)
@@ -159,7 +140,6 @@ function M.adjust(redraw)
       end
     end
   end
-  redraw()
   return ok and accepted == true
 end
 

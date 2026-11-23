@@ -10,12 +10,16 @@ local defaults = {
   keep_ratio = true,
   picker = { style = "plain" },
   ignore_filetypes = { "TelescopePrompt" },
-  highlights = { boundary = "DiagnosticInfo", picker = "IncSearch" },
+  highlights = { boundary = "DiagnosticInfo", adjust_boundary = "DiagnosticWarn", picker = "IncSearch" },
 }
 local options = defaults
 
 local function apply_colors()
-  for key, name in pairs({ boundary = "WinBoxBoundary", picker = "WinBoxPicker" }) do
+  for key, name in pairs({
+    boundary = "WinBoxBoundary",
+    adjust_boundary = "WinBoxAdjustBoundary",
+    picker = "WinBoxPicker",
+  }) do
     local value = options.highlights[key]
     vim.api.nvim_set_hl(0, name, type(value) == "string" and { link = value } or value)
   end
@@ -54,10 +58,17 @@ function M.pick()
 end
 
 function M.adjust()
-  return actions.adjust(function()
+  if not boundary.set_adjusting(true) then return false end
+  local function redraw()
     boundary.draw(options)
     vim.cmd.redraw()
-  end)
+  end
+  local ok, result = pcall(actions.adjust, redraw)
+  boundary.set_adjusting(false)
+  redraw()
+  if not ok then error(result, 0) end
+  if result and options.keep_ratio then ratio.remember() end
+  return result
 end
 
 M.focus = actions.focus

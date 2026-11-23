@@ -12,12 +12,13 @@ win_box.setup({
   ignore_filetypes = { "TelescopePrompt" },
   highlights = {
     boundary = "DiagnosticInfo",
+    adjust_boundary = "DiagnosticWarn",
     picker = { fg = "#ffffff", bg = "#355c88", bold = true },
   },
 })
 ```
 
-Highlights accept a group name or a highlight table. They apply only to the plugin's borders and labels. Focused shared edges use heavy one-cell lines where supported, falling back to a one-cell separator. Existing split junctions join the heavy focused edges to the lighter neighboring edges. No exterior or floating pane frame is added. Horizontal edges are colored with a global statusline (`laststatus=3`), or when `laststatus=0` and the separator window explicitly uses the blank statusline `%=`. Content-bearing statuslines are left alone.
+Highlights accept a group name or a highlight table. They apply only to the plugin's borders and labels. Focused shared edges use heavy one-cell lines where supported, falling back to a one-cell separator. Existing split junctions join the heavy focused edges to the lighter neighboring edges. No exterior or floating pane frame is added. Horizontal edges are colored with a global statusline (`laststatus=3`), or when `laststatus=0` and the separator window explicitly uses the blank statusline `%=`. Content-bearing statuslines are left alone. During `adjust()`, the same edges use `highlights.adjust_boundary` and return to `highlights.boundary` when resizing ends. Both respect `boundary = false` and `ignore_filetypes`.
 
 ## Picker appearance
 
