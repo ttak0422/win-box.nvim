@@ -68,7 +68,7 @@ given an explicit target still work.
 - `pick()`: display labels in the current tab's split windows. Enter a label to focus it, or Escape to cancel.
 - `adjust()`: resize the current split with `hjkl` or arrow keys. Changes take effect immediately. Enter keeps them; `q` or Escape restores the original sizes.
 - `focus(dir)`, `resize(dir, amount)`: act on the current split. Directions are `left`, `down`, `up`, `right` (or `hjkl`).
-- `move(dir)`: exchange the focused window with its neighbor in that direction without changing the split layout. Focus stays with the moved window. At an edge, focus and move do nothing.
+- `move(dir)`: exchange the focused window with its neighbor without changing the split layout. If there is no neighbor, move it to that edge, reorienting a simple perpendicular stack when there is room. Focus stays with the moved window. An already full-length edge window does not move further.
 - `swap([target])` / `swap_windows([target])`: exchange whole windows, including across split groups. Omit the target to show the picker; a window ID or direction can also be passed. If the available space cannot accommodate the temporary split anchors, the operation returns false without swapping buffers instead.
 - `swap_buffers([target])`: exchange only buffers and views. Does not bypass fixed buffers or discard buffers with destructive `bufhidden` settings.
 - `keep_ratio`: preserve each tab's split widths on editor resize, respecting fixed widths and Neovim's minimum window sizes. Very small sizes are best-effort.

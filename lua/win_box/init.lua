@@ -73,20 +73,23 @@ end
 
 M.focus = actions.focus
 M.resize = actions.resize
-function M.swap_windows(other)
-  local swapped = actions.swap_windows(other)
-  if swapped then
+local function finish_move(changed)
+  if changed then
     if options.keep_ratio then
       ratio.remember()
     end
     boundary.schedule(options)
   end
-  return swapped
+  return changed
+end
+
+function M.swap_windows(other)
+  return finish_move(actions.swap_windows(other))
 end
 
 function M.move(direction)
   if type(direction) ~= "string" then return false end
-  return M.swap_windows(direction)
+  return finish_move(actions.move(direction))
 end
 
 M.swap = M.swap_windows

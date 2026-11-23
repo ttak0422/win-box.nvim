@@ -199,4 +199,55 @@ assert(api.nvim_win_get_buf(readme) == readme_buf and api.nvim_win_get_buf(licen
 assert(not wb.move("left") and win() == readme)
 assert(vim.deep_equal(vim.fn.winlayout(), expected_move))
 
+-- Edge moves reorient either axis. With a neighbor, the earlier
+-- four-pane test still exercises exchange, not reorientation.
+local function check_edge_move(direction, axis, make_splits, first)
+  vim.cmd.tabnew()
+  local moving, others = make_splits()
+  api.nvim_set_current_win(moving)
+  local buf = api.nvim_win_get_buf(moving)
+  vim.wo[moving].cursorline = true
+  local expected_leaves = vim.tbl_map(function(id) return { "leaf", id } end, others)
+  table.insert(expected_leaves, first and 1 or #expected_leaves + 1, { "leaf", moving })
+  local expected_layout = { axis, expected_leaves }
+  assert(wb.move(direction) and win() == moving, direction)
+  assert(vim.deep_equal(vim.fn.winlayout(), expected_layout), vim.inspect(vim.fn.winlayout()))
+  assert(api.nvim_win_get_buf(moving) == buf and vim.wo[moving].cursorline)
+  assert(not wb.move(direction) and win() == moving, direction)
+end
+
+for _, dir in ipairs({ "left", "right" }) do
+  check_edge_move(dir, "row", function()
+    local upper = win()
+    vim.cmd("rightbelow new")
+    return upper, { win() }
+  end, dir == "left")
+end
+for _, dir in ipairs({ "up", "down" }) do
+  check_edge_move(dir, "col", function()
+    local l = win()
+    vim.cmd("rightbelow vnew")
+    return l, { win() }
+  end, dir == "up")
+end
+
+-- Screenshot geometry: [README | LICENSE] above another LICENSE.
+check_edge_move("left", "row", function()
+  local moving = win()
+  vim.cmd("rightbelow new")
+  local lower_pane = win()
+  api.nvim_set_current_win(moving)
+  vim.cmd("rightbelow vnew")
+  return moving, { win(), lower_pane }
+end, true)
+-- Transposed three-pane case, using the opposite edge.
+check_edge_move("down", "col", function()
+  local left_top = win()
+  vim.cmd("rightbelow vnew")
+  local right_pane = win()
+  api.nvim_set_current_win(left_top)
+  vim.cmd("rightbelow new")
+  return win(), { left_top, right_pane }
+end, false)
+
 print("win-box smoke: maps, colors, pick, adjust, edges, directional moves, swaps and modal key configuration")

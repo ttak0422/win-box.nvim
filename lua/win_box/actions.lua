@@ -94,6 +94,44 @@ function M.swap_windows(other)
   return other ~= nil and exchange.swap(win, other)
 end
 
+function M.move(direction)
+  local win = vim.api.nvim_get_current_win()
+  local key = direction_key(direction)
+  if not opposite[key] or not vim.tbl_contains(layout.windows(), win) then return false end
+  local target = neighbor(win, key)
+  if target then return exchange.swap(win, target) end
+
+  local horizontal = key == "h" or key == "l"
+  local first = key == "h" or key == "k"
+  local axis = horizontal and "row" or "col"
+  local before = vim.fn.winlayout()
+  if before[1] == "leaf" then return false end
+  local edge = before[2][first and 1 or #before[2]]
+  if before[1] == axis and edge[1] == "leaf" and edge[2] == win then return false end
+
+  -- Use Neovim's native edge motion, not a keypress through user mappings.
+  if not pcall(vim.cmd.wincmd, key:upper()) then return false end
+  local after = vim.fn.winlayout()
+
+  -- A simple perpendicular stack left behind at the edge can join the new
+  -- row or column. Preserve its visual order; don't flatten nested groups.
+  if before[1] ~= axis and after[1] == axis and #after[2] == 2 then
+    local stack = after[2][first and 2 or 1]
+    if stack[1] == before[1] and vim.iter(stack[2]):all(function(child) return child[1] == "leaf" end) then
+      local step = first and 1 or -1
+      local anchor = win
+      local split = horizontal and (first and "right" or "left") or (first and "below" or "above")
+      local count = #stack[2]
+      for i = first and 1 or count, first and count - 1 or 2, step do
+        local leaf = stack[2][i][2]
+        if not pcall(vim.api.nvim_win_set_config, leaf, { win = anchor, split = split }) then break end
+        anchor = leaf
+      end
+    end
+  end
+  return not vim.deep_equal(before, vim.fn.winlayout())
+end
+
 function M.adjust(redraw)
   local origin = vim.api.nvim_get_current_win()
   if not vim.tbl_contains(layout.windows(), origin) or #layout.windows() < 2 then
