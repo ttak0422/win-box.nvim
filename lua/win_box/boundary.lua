@@ -64,9 +64,10 @@ local function draw(options)
   for _, range in ipairs(M.segments(active, wins, horizontal)) do
     local vertical = range.axis == "v"
     local length = range.stop - range.start
-    local char = vertical and (fill.vert or "│") or (fill.horiz or "─")
+    local char = vertical and "┃" or "━"
     if vim.fn.strdisplaywidth(char) ~= 1 then
-      char = vertical and "|" or "-"
+      local fallback = fill[vertical and "vert" or "horiz"]
+      char = fallback and vim.fn.strdisplaywidth(fallback) == 1 and fallback or (vertical and "|" or "-")
     end
     local lines = {}
     for i = 1, vertical and length or 1 do

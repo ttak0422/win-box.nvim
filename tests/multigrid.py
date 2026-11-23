@@ -90,45 +90,52 @@ try:
     assert any(event[0] == "win_float_pos" for event in redraws)
     # In a T split, each accent owns only the cells of one shared separator.
     # The global float border must not add a grid cell or paint the junction.
-    redraws.clear()
-    accents = lua("""
-      vim.o.winborder = "single"
-      vim.opt.fillchars:append({ vert = "\u2502", horiz = "\u2500" })
-      require("win_box.boundary").draw({ boundary = true, ignore_filetypes = {} })
-      vim.cmd.redraw()
-      local result = {}
-      local box = require("win_box.layout").rect(left)
-      for _, id in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        local conf = vim.api.nvim_win_get_config(id)
-        if conf.zindex == 1 then
-          assert(not (conf.row <= box.bottom and conf.row + conf.height > box.bottom
-            and conf.col <= box.right and conf.col + conf.width > box.right), "covered T junction")
-          result[#result + 1] = { id, conf.width, conf.height }
-        end
-      end
-      return result
-    """)
-    assert len(accents) == 2 and all(min(w, h) == 1 for _, w, h in accents), accents
-    tick()
-    grid_by_win, sizes, painted = {}, {}, {}
-    for event in redraws:
-        if event[0] == "win_float_pos":
-            for values in event[1:]:
-                handle = values[1]
-                if isinstance(handle, msgpack.ExtType):
-                    handle = msgpack.unpackb(handle.data)
-                grid_by_win[handle] = values[0]
-        elif event[0] == "grid_resize":
-            for grid, width, height in event[1:]:
-                sizes[grid] = (width, height)
-        elif event[0] == "grid_line":
-            for row in event[1:]:
-                painted.setdefault(row[0], set()).update(cell[0] for cell in row[3])
-    for win, width, height in accents:
-        grid = grid_by_win[win]
-        assert sizes[grid] == (width, height), ("accent inherited frame", sizes[grid], width, height)
-        glyph = "\u2502" if width == 1 else "\u2500"
-        assert glyph in painted[grid] and painted[grid] <= {glyph, " "}, painted[grid]
+    def check_accents(vert, horiz, ambi, expected_vert, expected_horiz):
+        redraws.clear()
+        accents = lua("""
+          vim.o.winborder = "single"
+          vim.opt.fillchars:append({ vert = VERT, horiz = HORIZ })
+          vim.o.ambiwidth = AMBI
+          require("win_box.boundary").draw({ boundary = true, ignore_filetypes = {} })
+          vim.cmd.redraw()
+          local result = {}
+          local box = require("win_box.layout").rect(left)
+          for _, id in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            local conf = vim.api.nvim_win_get_config(id)
+            if conf.zindex == 1 then
+              assert(not (conf.row <= box.bottom and conf.row + conf.height > box.bottom
+                and conf.col <= box.right and conf.col + conf.width > box.right), "covered T junction")
+              result[#result + 1] = { id, conf.width, conf.height }
+            end
+          end
+          return result
+        """.replace("VERT", repr(vert)).replace("HORIZ", repr(horiz)).replace("AMBI", repr(ambi)))
+        assert len(accents) == 2 and all(min(w, h) == 1 for _, w, h in accents), accents
+        tick()
+        grid_by_win, sizes, painted = {}, {}, {}
+        for event in redraws:
+            if event[0] == "win_float_pos":
+                for values in event[1:]:
+                    handle = values[1]
+                    if isinstance(handle, msgpack.ExtType):
+                        handle = msgpack.unpackb(handle.data)
+                    grid_by_win[handle] = values[0]
+            elif event[0] == "grid_resize":
+                for grid, width, height in event[1:]:
+                    sizes[grid] = (width, height)
+            elif event[0] == "grid_line":
+                for row in event[1:]:
+                    painted.setdefault(row[0], set()).update(cell[0] for cell in row[3])
+        for win, width, height in accents:
+            grid = grid_by_win[win]
+            assert sizes[grid] == (width, height), ("accent inherited frame", sizes[grid], width, height)
+            glyph = expected_vert if width == 1 else expected_horiz
+            assert glyph in painted[grid] and painted[grid] <= {glyph, " "}, painted[grid]
+
+    check_accents("\u2502", "\u2500", "single", "\u2503", "\u2501")
+    assert lua("return {vim.opt.fillchars:get().vert, vim.opt.fillchars:get().horiz}") == ["\u2502", "\u2500"]
+    check_accents("|", "-", "double", "|", "-")
+    lua("vim.o.ambiwidth = 'single'")
     resize(101)
     dims = lua("return {vim.api.nvim_win_get_width(left), vim.api.nvim_win_get_width(bottom)}")
     assert dims[0] == dims[1] and abs(dims[0] - 20) <= 1, dims
